@@ -1,0 +1,36 @@
+services:
+  api:
+    build: .
+    container_name: investigation-api
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - keycloak
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/investigations
+
+  db:
+    image: postgres:16
+    container_name: investigation-db
+    environment:
+      POSTGRES_DB: investigations
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0.1
+    container_name: investigation-keycloak
+    command: start-dev
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:

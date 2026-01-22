@@ -1,37 +1,29 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from .db import engine
 from .models import Base
-from sqlalchemy.orm import Session
-from fastapi import Depends
-from .db import SessionLocal
-from .models import Investigation
-from .auth import require_role
+from .api.v1.router import v1_router
 
-def get_db():
-  db = SessionLocal()
-  try: 
-    yield db
-  finally:
-    db.close()
+app = FastAPI(
+  title='Investigation API',
+  version='1.0.0',
+  description='API for managing investigations'
+)
 
-app = FastAPI(title='Investigation API')
-
-@app.post('/investigations', dependencies=[Depends(require_role('admin'))])
-def create_investigation(title: str, db: Session = Depends(get_db)):
-  inv = Investigation(title=title)
-  db.add(inv)
-  db.commit()
-  db.refresh(inv)
-  return inv
-
-@app.get("/investigations", dependencies=[Depends(require_role("investigator"))])
-def list_investigations(db: Session = Depends(get_db)):
-  return db.query(Investigation).all()
+app.add_middleware(
+  CORSMiddleware,
+  allow_origins=['*'],
+  allow_credentials=True,
+  allow_methods=['*'],
+  allow_headers=['*'],
+)
 
 @app.on_event('startup')
 def startup():
   Base.metadata.create_all(bind=engine)
 
-@app.get('/health')
+app.include_router(v1_router, prefix='/api')
+
+@app.get('/health', tags=['health'])
 def health():
-  return {'status': 'ok'}
+  return {'status': 'ok', 'version': '1.0.0'}

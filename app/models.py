@@ -9,6 +9,7 @@ class Investigation(Base):
   id: Mapped[int] = mapped_column(primary_key=True)
   title: Mapped[str] = mapped_column(String(255), nullable=False)
   status: Mapped[str] = mapped_column(String(50), default="open")
+  pdf_file_path: Mapped[str] = mapped_column(String(500), nullable=True)
   created_at: Mapped[datetime] = mapped_column(
       DateTime(timezone=True),
       server_default=func.now()

@@ -16,6 +16,7 @@ class InvestigationUpdate(BaseModel):
 class InvestigationResponse(InvestigationBase):
   id: int
   created_at: datetime
+  pdf_file_path: Optional[str] = None
 
   model_config = ConfigDict(from_attributes=True)
 

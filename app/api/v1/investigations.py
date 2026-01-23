@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi.responses import StreamingResponse
+from io import BytesIO
+from ...services.minio_service import minio_service
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc
 
@@ -164,6 +167,130 @@ def delete_investigation(
       status_code=status.HTTP_404_NOT_FOUND,
       detail=f'Investigation {investigation_id} not found'
     )
+  
+  if investigation.pdf_file_path:
+    try:
+      minio_service.delete_pdf(investigation.pdf_file_path)
+    except Exception:
+      pass
 
   db.delete(investigation)
   db.commit()
+
+@router.post('/{investigation_id}/upload-pdf', status_code=status.HTTP_200_OK)
+async def upload_investigation_pdf(
+    investigation_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user = Depends(require_role('admin'))
+):
+  '''Upload a PDF file for an investigation.'''
+  
+  investigation = db.query(Investigation).filter(Investigation.id == investigation_id).first()
+  if not investigation:
+    raise HTTPException(
+      status_code=status.HTTP_404_NOT_FOUND,
+      detail=f'Investigation {investigation_id} not found'
+    )
+  
+  if not file.filename.endswith('.pdf'):
+    raise HTTPException(
+      status_code=status.HTTP_400_BAD_REQUEST,
+      detail='Only PDF files are allowed'
+    )
+  
+  contents = await file.read()
+  if len(contents) > 10 * 1024 * 1024:
+    raise HTTPException(
+      status_code=status.HTTP_400_BAD_REQUEST,
+      detail='File size exceeds 10MB limit'
+    )
+  
+  if investigation.pdf_file_path:
+    try:
+      minio_service.delete_pdf(investigation.pdf_file_path)
+    except Exception:
+      pass
+  
+  try:
+    object_path = minio_service.upload_pdf(contents, investigation_id, file.filename)
+    investigation.pdf_file_path = object_path
+    db.commit()
+    
+    return {
+      'message': 'PDF uploaded successfully',
+      'file_path': object_path
+    }
+  except Exception as e:
+    raise HTTPException(
+      status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+      detail=f'Error uploading file: {str(e)}'
+    )
+
+@router.get('/{investigation_id}/pdf', status_code=status.HTTP_200_OK)
+def download_investigation_pdf(
+    investigation_id: int,
+    db: Session = Depends(get_db),
+    user = Depends(require_role('investigator'))
+):
+  '''Download the PDF file for an investigation.'''
+  
+  investigation = db.query(Investigation).filter(Investigation.id == investigation_id).first()
+  if not investigation:
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f'Investigation {investigation_id} not found'
+    )
+  
+  if not investigation.pdf_file_path:
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail='No PDF file attached to this investigation'
+    )
+  
+  try:
+    pdf_data = minio_service.download_pdf(investigation.pdf_file_path)
+    
+    return StreamingResponse(
+      BytesIO(pdf_data),
+      media_type='application/pdf',
+      headers={
+       'Content-Disposition': f'attachment; filename="investigation_{investigation_id}.pdf"'
+      }
+    )
+  except Exception as e:
+    raise HTTPException(
+      status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+      detail=f'Error downloading file: {str(e)}'
+    )
+  
+@router.delete('/{investigation_id}/pdf', status_code=status.HTTP_204_NO_CONTENT)
+def delete_investigation_pdf(
+    investigation_id: int,
+    db: Session = Depends(get_db),
+    user = Depends(require_role('admin'))
+):
+  '''Delete the PDF file for an investigation.'''
+  
+  investigation = db.query(Investigation).filter(Investigation.id == investigation_id).first()
+  if not investigation:
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f'Investigation {investigation_id} not found'
+    )
+  
+  if not investigation.pdf_file_path:
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail='No PDF file attached to this investigation'
+    )
+  
+  try:
+    minio_service.delete_pdf(investigation.pdf_file_path)
+    investigation.pdf_file_path = None
+    db.commit()
+  except Exception as e:
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail=f'Error deleting file: {str(e)}'
+    )

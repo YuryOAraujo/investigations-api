@@ -10,6 +10,8 @@ A modern, production-ready REST API for managing investigations built with **Fas
 - **Keycloak** - Enterprise-grade authentication & authorization
 - **JWT Tokens** - Secure token-based authentication
 - **Role-Based Access Control (RBAC)** - Admin role bypasses all permission checks
+- **MinIO** - S3-compatible object storage for PDF file attachments
+- **File Upload** - Support for PDF attachments per investigation
 - **Pagination** - Efficient data retrieval with skip/limit
 - **Filtering** - Query by status, title, and more
 - **Sorting** - Sort by any column (ascending/descending)
@@ -35,6 +37,7 @@ A modern, production-ready REST API for managing investigations built with **Fas
 - PostgreSQL 13+
 - Docker & Docker Compose (optional)
 - Keycloak instance
+- MinIO (included in docker-compose)
 
 ### Environment Variables
 
@@ -48,6 +51,12 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/investigations
 KEYCLOAK_URL=http://keycloak:8080
 KEYCLOAK_REALM=investigations
 KEYCLOAK_CLIENT_ID=investigations-api
+
+# MinIO
+MINIO_ENDPOINT=localhost:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+MINIO_BUCKET_NAME=investigations
 ```
 
 ### Setup
@@ -92,7 +101,13 @@ docker-compose up -d
 
 The API will be available at `http://localhost:8000`
 
-## 📡 API Endpoints
+**Service URLs:**
+- API Documentation: `http://localhost:8000/docs`
+- MinIO Console: `http://localhost:9001` (user: minioadmin, password: minioadmin)
+- Keycloak: `http://localhost:8080`
+- PostgreSQL: `localhost:5432`
+
+## API Endpoints
 
 ### Health Check
 
@@ -159,6 +174,7 @@ GET /api/v1/investigations/{investigation_id}
   "id": 1,
   "title": "Security Breach Investigation",
   "status": "open",
+  "pdf_file_path": "investigation_1/report.pdf",
   "created_at": "2026-01-22T10:30:00+00:00"
 }
 ```
@@ -236,6 +252,65 @@ DELETE /api/v1/investigations/{investigation_id}
 
 **Response:** `204 No Content`
 
+### Upload PDF to Investigation
+
+```
+POST /api/v1/investigations/{investigation_id}/upload-pdf
+```
+
+**Required Role:** `admin`
+
+**Request:** Multipart form-data with PDF file
+
+**Example:**
+```bash
+curl -X POST "http://localhost:8000/api/v1/investigations/1/upload-pdf" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -F "file=@/path/to/report.pdf"
+```
+
+**Response:** `200 OK`
+```json
+{
+  "message": "PDF uploaded successfully",
+  "file_path": "investigation_1/report.pdf"
+}
+```
+
+**Notes:**
+- Only PDF files are allowed
+- Maximum file size: 10MB
+- Uploading a new PDF replaces the existing one
+
+### Download Investigation PDF
+
+```
+GET /api/v1/investigations/{investigation_id}/pdf
+```
+
+**Required Role:** `investigator`
+
+**Example:**
+```bash
+curl -X GET "http://localhost:8000/api/v1/investigations/1/pdf" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  --output investigation_1.pdf
+```
+
+**Response:** `200 OK` - PDF file download
+
+### Delete Investigation PDF
+
+```
+DELETE /api/v1/investigations/{investigation_id}/pdf
+```
+
+**Required Role:** `admin`
+
+**Response:** `204 No Content`
+
+**Note:** Deleting an investigation also deletes its associated PDF file automatically.
+
 ## Authentication
 
 This API uses **Keycloak** for authentication with **JWT tokens**.
@@ -296,6 +371,17 @@ investigations-api/
 │   │       ├── __init__.py
 │   │       ├── investigations.py    # Investigation endpoints
 │   │       └── router.py            # V1 router setup
+│   └── services/
+│       ├── __init__.py
+│       └── minio_service.py         # MinIO file operations
+├── migrations/                      # Alembic migrations
+│   ├── versions/
+│   │   ├── 63ffc62e06da_initial_migration_create_investigations_.py
+│   │   └── 80c8036b4761_add_pdf_file_path_to_investigations_.py
+│   ├── env.py                       # Alembic environment configuration
+│   ├── script.py.mako               # Migration template
+│   └── README
+├── alembic.ini                      # Alembic configuration
 ├── docker-compose.yml
 ├── Dockerfile
 ├── requirements.txt
@@ -315,6 +401,7 @@ investigations-api/
 | Database Migrations | Alembic |
 | Validation | Pydantic v2 |
 | Authentication | Keycloak + JWT |
+| Object Storage | MinIO |
 | HTTP Client | httpx |
 | Server | Uvicorn |
 
@@ -326,6 +413,8 @@ investigations-api/
 - **python-jose** - JWT token handling
 - **httpx** - Async HTTP client for Keycloak JWKS fetching
 - **Alembic** - Database migrations and versioning
+- **MinIO** - S3-compatible object storage for file management
+- **python-multipart** - Form data and file upload support
 
 ### Running Tests
 
@@ -352,9 +441,14 @@ CREATE TABLE investigations (
     id SERIAL PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
     status VARCHAR(50) DEFAULT 'open',
+    pdf_file_path VARCHAR(500),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+**Notes:**
+- `pdf_file_path` stores the MinIO object path (e.g., "investigation_1/report.pdf")
+- Files are stored in MinIO bucket named "investigations"
 
 ## Database Migrations
 

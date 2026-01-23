@@ -18,9 +18,10 @@ app.add_middleware(
   allow_headers=['*'],
 )
 
-@app.on_event('startup')
-def startup():
-  Base.metadata.create_all(bind=engine)
+# Allow alembic to manage table migrations, instead of relying on app to do so
+# @app.on_event('startup')
+# def startup():
+#   Base.metadata.create_all(bind=engine)
 
 app.include_router(v1_router, prefix='/api')
 

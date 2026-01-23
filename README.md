@@ -353,14 +353,27 @@ CREATE TABLE investigations (
 );
 ```
 
-### Migrations
+## Database Migrations
 
-Database tables are created automatically on startup via SQLAlchemy.
+This project uses Alembic for database schema management. Migrations are automatically applied when the application starts.
 
-To reset the database:
+### Common Commands
+
 ```bash
-docker-compose down -v
-docker-compose up -d
+# View current migration status
+docker-compose exec api alembic current
+
+# View all migrations
+docker-compose exec api alembic history --verbose
+
+# Create a new migration
+docker-compose exec api alembic revision --autogenerate -m "super detailed message here."
+
+# Apply all pending migrations
+docker-compose exec api alembic upgrade head
+
+# Rollback last migration
+docker-compose exec api alembic downgrade -1
 ```
 
 ## API Versioning

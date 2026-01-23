@@ -5,11 +5,13 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - db
-      - keycloak
+      db:
+        condition: service_healthy
     env_file: .env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/investigations
+    volumes:
+      - .:/app
 
   db:
     image: postgres:16
@@ -22,6 +24,11 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   keycloak:
     image: quay.io/keycloak/keycloak:25.0.1

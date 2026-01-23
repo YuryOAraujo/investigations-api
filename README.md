@@ -6,6 +6,7 @@ A modern, production-ready REST API for managing investigations built with **Fas
 
 - **FastAPI** - High-performance async Python web framework
 - **PostgreSQL** - Robust relational database
+- **Alembic** - Migrations and versioning
 - **Keycloak** - Enterprise-grade authentication & authorization
 - **JWT Tokens** - Secure token-based authentication
 - **Role-Based Access Control (RBAC)** - Admin role bypasses all permission checks
@@ -311,6 +312,7 @@ investigations-api/
 | Web Framework | FastAPI 0.100+ |
 | Database | PostgreSQL 13+ |
 | ORM | SQLAlchemy 2.0+ |
+| Database Migrations | Alembic |
 | Validation | Pydantic v2 |
 | Authentication | Keycloak + JWT |
 | HTTP Client | httpx |
@@ -323,6 +325,7 @@ investigations-api/
 - **Pydantic** - Data validation and settings management
 - **python-jose** - JWT token handling
 - **httpx** - Async HTTP client for Keycloak JWKS fetching
+- **Alembic** - Database migrations and versioning
 
 ### Running Tests
 

@@ -12,6 +12,8 @@ A modern, production-ready REST API for managing investigations built with **Fas
 - **Role-Based Access Control (RBAC)** - Admin role bypasses all permission checks
 - **MinIO** - S3-compatible object storage for PDF file attachments
 - **File Upload** - Support for PDF attachments per investigation
+- **Kafka (KRaft)** - Event streaming for investigation changes
+- **Event-Driven Architecture** - Real-time event publishing and consumption
 - **Pagination** - Efficient data retrieval with skip/limit
 - **Filtering** - Query by status, title, and more
 - **Sorting** - Sort by any column (ascending/descending)
@@ -24,6 +26,7 @@ A modern, production-ready REST API for managing investigations built with **Fas
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [API Endpoints](#api-endpoints)
+- [Event Streaming](#event-streaming)
 - [Authentication](#authentication)
 - [Project Structure](#project-structure)
 - [Development](#development)
@@ -38,6 +41,7 @@ A modern, production-ready REST API for managing investigations built with **Fas
 - Docker & Docker Compose (optional)
 - Keycloak instance
 - MinIO (included in docker-compose)
+- Kafka with KRaft (included in docker-compose)
 
 ### Environment Variables
 
@@ -57,6 +61,10 @@ MINIO_ENDPOINT=localhost:9000
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
 MINIO_BUCKET_NAME=investigations
+
+# Kafka
+KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+KAFKA_TOPIC=investigation-events
 ```
 
 ### Setup
@@ -104,6 +112,7 @@ The API will be available at `http://localhost:8000`
 **Service URLs:**
 - API Documentation: `http://localhost:8000/docs`
 - MinIO Console: `http://localhost:9001` (user: minioadmin, password: minioadmin)
+- Kafka UI: `http://localhost:8090`
 - Keycloak: `http://localhost:8080`
 - PostgreSQL: `localhost:5432`
 
@@ -311,6 +320,70 @@ DELETE /api/v1/investigations/{investigation_id}/pdf
 
 **Note:** Deleting an investigation also deletes its associated PDF file automatically.
 
+## Event Streaming
+
+This API publishes events to Kafka for all investigation changes. Events can be consumed for audit logging, notifications, analytics, and more.
+
+### Event Types
+
+All events are published to the `investigation-events` topic:
+
+- **created** - Investigation created
+- **updated** - Investigation updated (full or partial)
+- **deleted** - Investigation deleted
+- **pdf_uploaded** - PDF file uploaded
+- **pdf_deleted** - PDF file deleted
+
+### Event Schema
+
+```json
+{
+  "event_type": "created",
+  "investigation_id": 1,
+  "timestamp": "2026-01-24T01:30:00.000Z",
+  "data": {
+    "title": "Security Breach Investigation",
+    "status": "open"
+  },
+  "user": {
+    "username": "admin"
+  }
+}
+```
+
+### Viewing Events
+
+**Kafka UI:**
+1. Visit `http://localhost:8090`
+2. Click "Topics"
+3. Select "investigation-events"
+4. View messages in real-time
+
+### Consuming Events
+
+Create a consumer to process events:
+
+```bash
+# Run the included consumer
+docker-compose exec api python -m app.consumers.investigation_consumer
+```
+
+**Example consumer output:**
+```
+INFO:__main__:Received event: created for investigation 1 at 2026-01-24T01:30:00
+INFO:__main__:Investigation created: Security Breach Investigation
+INFO:__main__:Action performed by: admin
+```
+
+### Use Cases for Events
+
+- Audit logging and compliance
+- Real-time notifications (email, Slack, etc.)
+- Data synchronization across microservices
+- Analytics and reporting
+- Triggering automated workflows
+- Event sourcing and replay
+
 ## Authentication
 
 This API uses **Keycloak** for authentication with **JWT tokens**.
@@ -373,7 +446,11 @@ investigations-api/
 │   │       └── router.py            # V1 router setup
 │   └── services/
 │       ├── __init__.py
-│       └── minio_service.py         # MinIO file operations
+│       ├── minio_service.py         # MinIO file operations
+│       └── kafka_service.py         # Kafka event producer
+│   └── consumers/
+│       ├── __init__.py
+│       └── investigation_consumer.py # Kafka event consumer
 ├── migrations/                      # Alembic migrations
 │   ├── versions/
 │   │   ├── 63ffc62e06da_initial_migration_create_investigations_.py
@@ -402,6 +479,7 @@ investigations-api/
 | Validation | Pydantic v2 |
 | Authentication | Keycloak + JWT |
 | Object Storage | MinIO |
+| Event Streaming | Kafka (KRaft mode) |
 | HTTP Client | httpx |
 | Server | Uvicorn |
 
@@ -415,6 +493,7 @@ investigations-api/
 - **Alembic** - Database migrations and versioning
 - **MinIO** - S3-compatible object storage for file management
 - **python-multipart** - Form data and file upload support
+- **aiokafka** - Async Kafka client for event streaming
 
 ### Running Tests
 

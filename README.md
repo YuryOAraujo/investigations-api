@@ -449,22 +449,7 @@ CREATE TABLE investigations (
 **Notes:**
 - `pdf_file_path` stores the MinIO object path (e.g., "investigation_1/report.pdf")
 - Files are stored in MinIO bucket named "investigations"
-
-## Database Migrations
-
-This project uses Alembic for database schema management. Migrations are automatically applied when the application starts.
-
-### Common Commands
-
-```bash
-# View current migration status
-docker-compose exec api alembic current
-
-# View all migrations
-docker-compose exec api alembic history --verbose
-
-# Create a new migration
-docker-compose exec api alembic revision --autogenerate -m "super detailed message here."
+ocker-compose exec api alembic revision --autogenerate -m "super detailed message here."
 
 # Apply all pending migrations
 docker-compose exec api alembic upgrade head

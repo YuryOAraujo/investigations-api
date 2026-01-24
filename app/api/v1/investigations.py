@@ -10,6 +10,7 @@ from ...models import Investigation
 from ...schemas import InvestigationCreate, InvestigationUpdate, InvestigationResponse
 from ...auth import require_role
 from ...dependencies import PaginationParams, FilterParams
+from ...services.kafka_service import kafka_service
 
 router = APIRouter(prefix='/investigations', tags=['investigations'])
 
@@ -86,7 +87,7 @@ def get_investigation(
   return investigation
 
 @router.post('', response_model=InvestigationResponse, status_code=status.HTTP_201_CREATED)
-def create_investigation(
+async def create_investigation(
   data: InvestigationCreate,
   db: Session = Depends(get_db),
   user = Depends(require_role('admin'))
@@ -99,11 +100,21 @@ def create_investigation(
   db.add(investigation)
   db.commit()
   db.refresh(investigation)
+
+  await kafka_service.publish_event(
+    event_type='created',
+    investigation_id=investigation.id,
+    data={
+      'title': investigation.title,
+      'status': investigation.status
+    },
+    user={'username': user.get('preferred_username')}
+  )
   
   return investigation
 
 @router.put('/{investigation_id}', response_model=InvestigationResponse, status_code=status.HTTP_200_OK)
-def update_investigation(
+async def update_investigation(
   investigation_id: int,
   data: InvestigationCreate,
   db: Session = Depends(get_db),
@@ -121,15 +132,33 @@ def update_investigation(
       detail=f'Investigation {investigation_id} not found'
     )
   
+  old_data = {
+    'title': investigation.title,
+    'status': investigation.status
+  }
+  
   investigation.title = data.title
   investigation.status = data.status
   db.commit()
   db.refresh(investigation)
+
+  await kafka_service.publish_event(
+    event_type='updated',
+    investigation_id=investigation.id,
+    data={
+      'old': old_data,
+      'new': {
+        'title': investigation.id,
+        'status': investigation.status
+      }
+    },
+    user={'username': user.get('preferred_username')}
+  )
   
   return investigation
 
 @router.patch('/{investigation_id}', response_model=InvestigationResponse, status_code=status.HTTP_200_OK)
-def partial_update_investigation(
+async def partial_update_investigation(
   investigation_id: int,
   data: InvestigationUpdate,
   db: Session = Depends(get_db),
@@ -144,17 +173,30 @@ def partial_update_investigation(
       detail=f'Investigation {investigation_id} not found'
     )
   
+  changes = {}
   update_data = data.model_dump(exclude_unset=True)
+
   for field, value in update_data.items():
+    changes[field] = {
+      'old': getattr(investigation, field),
+      'new': value
+    }
     setattr(investigation, field, value)
   
   db.commit()
   db.refresh(investigation)
+
+  await kafka_service.publish_event(
+    event_type='updated',
+    investigation_id=investigation.id,
+    data={'changes': changes},
+    user={'username': user.get('preferred_username')}
+  )
   
   return investigation
 
 @router.delete('/{investigation_id}', status_code=status.HTTP_204_NO_CONTENT)
-def delete_investigation(
+async def delete_investigation(
   investigation_id: int,
   db: Session = Depends(get_db),
   user = Depends(require_role('admin'))
@@ -168,6 +210,11 @@ def delete_investigation(
       detail=f'Investigation {investigation_id} not found'
     )
   
+  investigation_data = {
+    'title': investigation.title,
+    'status': investigation.status
+  }
+  
   if investigation.pdf_file_path:
     try:
       minio_service.delete_pdf(investigation.pdf_file_path)
@@ -176,6 +223,13 @@ def delete_investigation(
 
   db.delete(investigation)
   db.commit()
+
+  await kafka_service.publish_event(
+    event_type='deleted',
+    investigation_id=investigation_id,
+    data=investigation_data,
+    user={'username': user.get('preferred_username')}
+  )
 
 @router.post('/{investigation_id}/upload-pdf', status_code=status.HTTP_200_OK)
 async def upload_investigation_pdf(
@@ -216,6 +270,17 @@ async def upload_investigation_pdf(
     object_path = minio_service.upload_pdf(contents, investigation_id, file.filename)
     investigation.pdf_file_path = object_path
     db.commit()
+
+    await kafka_service.publish_event(
+      event_type='pdf_uploaded',
+      investigation_id=investigation_id,
+      data={
+          'filename': file.filename,
+          'file_path': object_path,
+          'file_size': len(contents)
+      },
+      user={'username': user.get('preferred_username')}
+    )
     
     return {
       'message': 'PDF uploaded successfully',

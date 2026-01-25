@@ -38,7 +38,7 @@ class MinioService:
       raise Exception(f'Error uploading file: {e}')
     
   def download_pdf(self, object_name: str) -> bytes:
-    Response = None
+    response = None
     
     try:
       response = self.client.get_object(self.bucket_name, object_name)
@@ -65,6 +65,8 @@ class MinioService:
         object_name,
         expires=timedelta(seconds=expires_in_seconds)
       )
+
+      return url
     except S3Error as e:
       raise Exception(f'Error generating presigned URL: {e}')
     

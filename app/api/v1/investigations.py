@@ -69,23 +69,6 @@ def list_investigations(
     }
   }
 
-@router.get('/{investigation_id}', response_model=InvestigationResponse, status_code=status.HTTP_200_OK)
-def get_investigation(
-  investigation_id: int,
-  db: Session = Depends(get_db),
-  user = Depends(require_role('investigator'))
-):
-  '''Get a specific investigation by ID.'''
-  investigation = db.query(Investigation).filter(Investigation.id == investigation_id).first()
-  
-  if not investigation:
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail=f'Investigation {investigation_id} not found'
-    )
-  
-  return investigation
-
 @router.post('', response_model=InvestigationResponse, status_code=status.HTTP_201_CREATED)
 async def create_investigation(
   data: InvestigationCreate,
@@ -359,3 +342,20 @@ def delete_investigation_pdf(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail=f'Error deleting file: {str(e)}'
     )
+  
+@router.get('/{investigation_id}', response_model=InvestigationResponse, status_code=status.HTTP_200_OK)
+def get_investigation(
+  investigation_id: int,
+  db: Session = Depends(get_db),
+  user = Depends(require_role('investigator'))
+):
+  '''Get a specific investigation by ID.'''
+  investigation = db.query(Investigation).filter(Investigation.id == investigation_id).first()
+  
+  if not investigation:
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f'Investigation {investigation_id} not found'
+    )
+  
+  return investigation
